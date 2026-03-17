@@ -7,29 +7,6 @@ from app.storage import AuthorRecord, BookRecord
 client = TestClient(main.app)
 
 
-def test_list_books_returns_seed_data() -> None:
-    response = client.get("/books")
-
-    assert response.status_code == 200
-    assert len(response.json()) == 3
-    assert response.json()[0]["author"]["name"] == "J.R.R. Tolkien"
-
-
-def test_get_single_book() -> None:
-    response = client.get("/books/2")
-
-    assert response.status_code == 200
-    assert response.json()["title"] == "Dune"
-    assert response.json()["author"]["name"] == "Frank Herbert"
-
-
-def test_get_single_author() -> None:
-    response = client.get("/authors/3")
-
-    assert response.status_code == 200
-    assert response.json()["name"] == "William Gibson"
-
-
 def test_graphql_books_query() -> None:
     response = client.post(
         "/graphql",

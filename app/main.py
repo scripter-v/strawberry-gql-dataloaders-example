@@ -1,7 +1,7 @@
 # from collections.abc import Awaitable
 # from contextvars import ContextVar
 import logging
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 import strawberry
 from strawberry.dataloader import DataLoader
 from strawberry.fastapi import GraphQLRouter
@@ -24,28 +24,8 @@ def _author_from_record(record: AuthorRecord | None) -> Author | None:
     return Author(id=record.id, name=record.name) if record is not None else None
 
 
-def _author_payload(record: AuthorRecord) -> dict[str, str]:
-    return {"id": record.id, "name": record.name}
-
-
-async def _book_payload(record: BookRecord) -> dict[str, str | dict[str, str]]:
-    author = await storage.get_author(record.author_id)
-    if author is None:
-        raise ValueError(f"Missing author {record.author_id} for book {record.id}")
-    return {
-        "id": record.id,
-        "title": record.title,
-        "author": _author_payload(author),
-    }
-
-
 def _book_from_record(record: BookRecord) -> "Book":
     return Book(id=record.id, title=record.title, author_id=record.author_id)
-
-
-# req_ctx_author_cache = ContextVar[DataLoader[str, "Author"] | None](
-#     "req_ctx_author_cache", default=None
-# )
 
 
 async def _load_authors(author_ids: list[str]) -> list[Author | None]:
@@ -53,6 +33,10 @@ async def _load_authors(author_ids: list[str]) -> list[Author | None]:
         _author_from_record(ar) for ar in await storage.get_authors_by_ids(author_ids)
     ]
 
+
+# req_ctx_author_cache = ContextVar[DataLoader[str, "Author"] | None](
+#     "req_ctx_author_cache", default=None
+# )
 
 # def get_author_loader() -> DataLoader[str, Author]:
 #     authors_loader = req_ctx_author_cache.get()
@@ -127,29 +111,3 @@ app.include_router(graphql_app, prefix="/graphql")
 @app.get("/health")
 def healthcheck() -> dict[str, str]:
     return {"status": "ok"}
-
-
-@app.get("/authors")
-async def list_authors() -> list[dict[str, str]]:
-    return [_author_payload(record) for record in await storage.list_authors()]
-
-
-@app.get("/authors/{author_id}")
-async def get_author(author_id: str) -> dict[str, str]:
-    record = await storage.get_author(author_id)
-    if record is None:
-        raise HTTPException(status_code=404, detail="Author not found")
-    return _author_payload(record)
-
-
-@app.get("/books")
-async def list_books() -> list[dict[str, str | dict[str, str]]]:
-    return [await _book_payload(record) for record in await storage.list_books()]
-
-
-@app.get("/books/{book_id}")
-async def get_book(book_id: str) -> dict[str, str | dict[str, str]]:
-    record = await storage.get_book(book_id)
-    if record is None:
-        raise HTTPException(status_code=404, detail="Book not found")
-    return await _book_payload(record)
