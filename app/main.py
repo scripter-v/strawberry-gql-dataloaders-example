@@ -1,3 +1,5 @@
+# from collections.abc import Awaitable
+# from contextvars import ContextVar
 import logging
 from fastapi import FastAPI, HTTPException
 import strawberry
@@ -41,6 +43,29 @@ def _book_from_record(record: BookRecord) -> "Book":
     return Book(id=record.id, title=record.title, author_id=record.author_id)
 
 
+# req_ctx_author_cache = ContextVar[DataLoader[str, "Author"] | None](
+#     "req_ctx_author_cache", default=None
+# )
+
+
+async def _load_authors(author_ids: list[str]) -> list[Author | None]:
+    return [
+        _author_from_record(ar) for ar in await storage.get_authors_by_ids(author_ids)
+    ]
+
+
+# def get_author_loader() -> DataLoader[str, Author]:
+#     authors_loader = req_ctx_author_cache.get()
+#     if not authors_loader:
+#         authors_loader = DataLoader[str, Author](load_fn=_load_authors)
+#         req_ctx_author_cache.set(authors_loader)
+#     return authors_loader
+#
+#
+# def author_resolver(root: "Book") -> Awaitable[Author]:
+#     return get_author_loader().load(root.author_id)
+
+
 @strawberry.type
 class Book:
     id: str
@@ -49,10 +74,12 @@ class Book:
 
     @strawberry.field
     async def author(self, info: Info["GraphQLContext", None]) -> Author | None:
-        logger.info("WTF1")
+        logger.debug(f"before loader for author id {self.author_id}")
         author = await info.context["author_loader"].load(self.author_id)
-        logger.info(f"WTF2: {author}")
+        logger.debug(f"after loader for author id {self.author_id}")
         return author
+
+    # author_ctxvars: Author = strawberry.field(resolver=author_resolver)
 
 
 storage: Storage = InMemoryStorage()
@@ -60,12 +87,6 @@ storage: Storage = InMemoryStorage()
 
 class GraphQLContext(TypedDict):
     author_loader: DataLoader[str, Author | None]
-
-
-async def _load_authors(author_ids: list[str]) -> list[Author | None]:
-    return [
-        _author_from_record(ar) for ar in await storage.get_authors_by_ids(author_ids)
-    ]
 
 
 async def get_context() -> GraphQLContext:
